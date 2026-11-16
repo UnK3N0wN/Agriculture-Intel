@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from corsheaders.defaults import default_headers
 
 # BASE_DIR is the "backend" folder
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -135,6 +136,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
+    "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
 }
 
 SIMPLE_JWT = {
@@ -150,6 +152,11 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
+CORS_EXPOSE_HEADERS = ["Retry-After"]
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1_000_000
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
@@ -189,11 +196,17 @@ PRIVATE_MEDIA_ROOT = (BASE_DIR / env("PRIVATE_MEDIA_ROOT", default="private_medi
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "redact": {"()": "config.logging_filters.RedactSecretsFilter"},
+    },
     "formatters": {
         "standard": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
+        "console": {"class": "logging.StreamHandler", "formatter": "standard", "filters": ["redact"],},
     },
     "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
+    "loggers": {
+        "httpx": {"level": "WARNING"}, "httpcore": {"level": "WARNING"}, "anthropic": {"level": "WARNING"}, "urllib3": {"level": "WARNING"},
+    },
 }
