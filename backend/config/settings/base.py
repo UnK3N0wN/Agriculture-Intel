@@ -184,9 +184,16 @@ AI_MAX_OUTPUT_TOKENS = env.int("AI_MAX_OUTPUT_TOKENS", default=1500)
 PLANTID_API_URL = env("PLANTID_API_URL", default="")
 PLANTID_API_KEY = env("PLANTID_API_KEY", default="")
 
+#Weather api
 WEATHER_API_BASE_URL = env("WEATHER_API_BASE_URL", default="https://api.open-meteo.com/v1/forecast")
 WEATHER_API_KEY = env("WEATHER_API_KEY", default="")
 WEATHER_CACHE_SECONDS = env.int("WEATHER_CACHE_SECONDS", default=10800)
+
+MOCK_DELAY_SECONDS = env.float("MOCK_DELAY_SECONDS", default=2.0)
+CELERY_BEAT_SCHEDULE = {
+    "fail-stale-scan-jobs": {"task": "scans.fail_stale_jobs", "schedule": 300.0},
+}
+
 
 UPLOAD_MAX_BYTES = env.int("UPLOAD_MAX_BYTES", default=8 * 1024 * 1024)
 UPLOAD_MAX_PIXELS = env.int("UPLOAD_MAX_PIXELS", default=25_000_000)

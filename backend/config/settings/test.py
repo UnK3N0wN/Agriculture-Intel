@@ -11,3 +11,5 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # fast, te
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 AI_PROVIDER = "mock"
+
+MOCK_DELAY_SECONDS = 0
