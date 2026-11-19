@@ -1,13 +1,13 @@
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
-from .anthropic_provider import AnthropicVisionProvider
+from .openai_provider import OpenAIProvider
 from .mock_provider import MockProvider
 from .plantid_provider import PlantIdProvider
 
 _PROVIDERS = {
     "mock": MockProvider,
-    "anthropic": AnthropicVisionProvider,
+    "openai": OpenAIProvider,
     "plantid": PlantIdProvider,
 }
 

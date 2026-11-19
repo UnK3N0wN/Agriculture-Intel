@@ -1,6 +1,6 @@
 import logging
 
-import anthropic
+import openai
 import requests
 
 GENERIC_MESSAGE = "We couldn't analyze this image right now. Please try again in a few minutes."
@@ -83,9 +83,13 @@ def classify_exception(exc):
     summary = safe_exc_summary(exc)
 
     # Anthropic SDK
-    if isinstance(exc, (anthropic.APITimeoutError, anthropic.APIConnectionError)):
+    if isinstance(exc, (openai.APITimeoutError, openai.APIConnectionError)):
         return ProviderUnavailable(summary)
-    if isinstance(exc, anthropic.APIStatusError):
+    if isinstance(exc, openai.APIStatusError):
+        # "You exceeded your current quota" arrives as a 429 but retrying never helps:
+        # it means the account is out of credits. Treat it as a configuration problem.
+        if exc.status_code == 429 and getattr(exc, "code", None) == "insufficient_quota":
+            return ProviderConfigError(f"{summary} insufficient_quota")
         return _from_status(exc.status_code, summary)
 
     # requests (Plant.id, weather)

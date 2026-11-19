@@ -176,11 +176,17 @@ LOGIN_LOCKOUT_SECONDS = env.int("LOGIN_LOCKOUT_SECONDS", default=900)
 
 AI_DAILY_CAP_PER_USER = env.int("AI_DAILY_CAP_PER_USER", default=30)
 
+# ----- AI Provider -------------
 AI_PROVIDER = env("AI_PROVIDER", default="mock")
-ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
-AI_MODEL = env("AI_MODEL", default="claude-sonnet-5-5")
 AI_REQUEST_TIMEOUT_SECONDS = env.int("AI_REQUEST_TIMEOUT_SECONDS", default=45)
-AI_MAX_OUTPUT_TOKENS = env.int("AI_MAX_OUTPUT_TOKENS", default=1500)
+AI_MAX_OUTPUT_TOKENS = env.int("AI_MAX_OUTPUT_TOKENS", default=2000)
+
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+OPENAI_MODEL = env("OPENAI_MODEL", default="gpt-4o-mini")
+OPENAI_BASE_URL = env("OPENAI_BASE_URL", default="")
+OPENAI_MAX_TOKENS_PARAM = env("OPENAI_MAX_TOKENS_PARAM", default="max_completion_tokens")
+OPENAI_JSON_MODE = env.bool("OPENAI_JSON_MODE", default=True)
+
 PLANTID_API_URL = env("PLANTID_API_URL", default="")
 PLANTID_API_KEY = env("PLANTID_API_KEY", default="")
 

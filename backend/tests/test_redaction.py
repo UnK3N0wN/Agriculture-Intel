@@ -8,12 +8,14 @@ def make_record(message, *args, exc_info=None):
     return logging.LogRecord("test", logging.ERROR, __file__, 1, message, args, exc_info)
 
 
-def test_redacts_anthropic_style_keys():
-    assert "sk-ant" not in redact("call failed with sk-ant-api03-ABCDEFGH12345678")
+def test_redacts_openai_and_google_style_keys():
+    text = redact("failed with sk-proj-ABCDEFGH12345678 and AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3")
+    assert "sk-proj" not in text
+    assert "AIzaSy" not in text
 
 
 def test_redacts_configured_secrets(settings):
-    settings.ANTHROPIC_API_KEY = "my-very-secret-provider-key"
+    settings.OPENAI_API_KEY = "my-very-secret-provider-key"
     assert "my-very-secret-provider-key" not in redact("oops my-very-secret-provider-key leaked")
 
 

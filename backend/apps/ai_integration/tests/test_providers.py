@@ -1,17 +1,21 @@
-import anthropic
+import types
+
 import httpx
+import openai
 import pytest
 import requests
 from django.core.exceptions import ImproperlyConfigured
 
-from apps.ai_integration import anthropic_provider, plantid_provider
-from apps.ai_integration.anthropic_provider import AnthropicVisionProvider
+from apps.ai_integration import openai_provider, plantid_provider
 from apps.ai_integration.errors import (
     ProviderBadResponse,
     ProviderConfigError,
+    ProviderRateLimited,
+    ProviderRejectedImage,
     ProviderUnavailable,
 )
 from apps.ai_integration.mock_provider import MockProvider
+from apps.ai_integration.openai_provider import OpenAIProvider
 from apps.ai_integration.plantid_provider import PlantIdProvider
 from apps.ai_integration.providers import get_provider
 
@@ -26,7 +30,7 @@ GOOD_JSON = (
 def test_factory_returns_requested_provider(settings):
     settings.AI_PROVIDER = "mock"
     assert isinstance(get_provider(), MockProvider)
-    assert isinstance(get_provider("anthropic"), AnthropicVisionProvider)
+    assert isinstance(get_provider("openai"), OpenAIProvider)
     assert isinstance(get_provider("PlantID"), PlantIdProvider)
 
 
@@ -49,18 +53,11 @@ def test_mock_can_simulate_failures(hint, error):
         MockProvider().analyze(b"x", "image/jpeg", hint)
 
 
-# ---------------------------------------------------------------- anthropic
-class FakeBlock:
-    type = "text"
-
-    def __init__(self, text):
-        self.text = text
-
-
-class FakeMessage:
-    def __init__(self, text, stop_reason="end_turn"):
-        self.content = [FakeBlock(text)]
-        self.stop_reason = stop_reason
+# ------------------------------------------------------------------- openai
+def completion(text, finish_reason="stop", refusal=None):
+    message = types.SimpleNamespace(content=text, refusal=refusal)
+    choice = types.SimpleNamespace(finish_reason=finish_reason, message=message)
+    return types.SimpleNamespace(choices=[choice])
 
 
 class FakeClient:
@@ -68,7 +65,7 @@ class FakeClient:
 
     def __init__(self, reply=None, error=None):
         self.reply, self.error = reply, error
-        self.messages = self
+        self.chat = types.SimpleNamespace(completions=self)
 
     def create(self, **kwargs):
         FakeClient.captured = kwargs
@@ -78,53 +75,126 @@ class FakeClient:
 
 
 def patch_client(monkeypatch, **kwargs):
-    monkeypatch.setattr(anthropic, "Anthropic", lambda **_: FakeClient(**kwargs))
+    init_args = {}
+
+    def factory(**init):
+        init_args.update(init)
+        return FakeClient(**kwargs)
+
+    monkeypatch.setattr(openai_provider.openai, "OpenAI", factory)
+    return init_args
 
 
-def test_anthropic_sends_image_prompt_and_parses_json(monkeypatch, settings):
-    settings.ANTHROPIC_API_KEY = "test-key-123456"
-    settings.AI_MODEL = "test-model"
-    patch_client(monkeypatch, reply=FakeMessage(GOOD_JSON))
+@pytest.fixture
+def openai_settings(settings):
+    settings.OPENAI_API_KEY = "test-key-123456"
+    settings.OPENAI_MODEL = "test-model"
+    settings.OPENAI_BASE_URL = ""
+    settings.OPENAI_MAX_TOKENS_PARAM = "max_completion_tokens"
+    settings.OPENAI_JSON_MODE = True
+    return settings
 
-    result = AnthropicVisionProvider().analyze(b"\xff\xd8fake", "image/jpeg", "Tomato")
+
+def status_error(cls, status, body):
+    response = httpx.Response(status, request=httpx.Request("POST", "https://example.test/v1/chat"))
+    return cls("simulated", response=response, body=body)
+
+
+def test_openai_sends_image_prompt_and_parses_json(monkeypatch, openai_settings):
+    init_args = patch_client(monkeypatch, reply=completion(GOOD_JSON))
+
+    result = OpenAIProvider().analyze(b"\xff\xd8fake", "image/jpeg", "Tomato")
 
     sent = FakeClient.captured
     assert sent["model"] == "test-model"
-    assert "JSON" in sent["system"]
-    blocks = sent["messages"][0]["content"]
-    assert blocks[0]["type"] == "image" and blocks[0]["source"]["media_type"] == "image/jpeg"
-    assert "Tomato" in blocks[1]["text"]
+    assert sent["response_format"] == {"type": "json_object"}
+    assert sent["max_completion_tokens"] == openai_settings.AI_MAX_OUTPUT_TOKENS
+    assert sent["messages"][0]["role"] == "system" and "JSON" in sent["messages"][0]["content"]
+    text_part, image_part = sent["messages"][1]["content"]
+    assert "Tomato" in text_part["text"]
+    assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert init_args["max_retries"] == 0 and init_args["base_url"] is None
     assert result.common_name == "Early blight" and result.pathogen_type == "fungal"
 
 
-def test_anthropic_tolerates_code_fences(monkeypatch, settings):
-    settings.ANTHROPIC_API_KEY = "test-key-123456"
-    patch_client(monkeypatch, reply=FakeMessage(f"```json\n{GOOD_JSON}\n```"))
-    assert AnthropicVisionProvider().analyze(b"x", "image/jpeg").health_status == "unhealthy"
+def test_openai_tolerates_code_fences(monkeypatch, openai_settings):
+    patch_client(monkeypatch, reply=completion(f"```json\n{GOOD_JSON}\n```"))
+    assert OpenAIProvider().analyze(b"x", "image/jpeg").health_status == "unhealthy"
 
 
-@pytest.mark.parametrize("reply", [FakeMessage("I cannot help"), FakeMessage(GOOD_JSON, stop_reason="max_tokens")])
-def test_anthropic_bad_output_is_a_retryable_error(monkeypatch, settings, reply):
-    settings.ANTHROPIC_API_KEY = "test-key-123456"
+def test_openai_compatible_service_settings(monkeypatch, openai_settings):
+    openai_settings.OPENAI_BASE_URL = "https://example.test/v1"
+    openai_settings.OPENAI_MAX_TOKENS_PARAM = "max_tokens"
+    openai_settings.OPENAI_JSON_MODE = False
+    init_args = patch_client(monkeypatch, reply=completion(GOOD_JSON))
+
+    OpenAIProvider().analyze(b"x", "image/jpeg")
+
+    sent = FakeClient.captured
+    assert init_args["base_url"] == "https://example.test/v1"
+    assert "max_tokens" in sent and "max_completion_tokens" not in sent
+    assert "response_format" not in sent
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [completion("I cannot help"), completion(GOOD_JSON, finish_reason="length"), types.SimpleNamespace(choices=[])],
+)
+def test_openai_bad_output_is_a_retryable_error(monkeypatch, openai_settings, reply):
     patch_client(monkeypatch, reply=reply)
     with pytest.raises(ProviderBadResponse) as exc:
-        AnthropicVisionProvider().analyze(b"x", "image/jpeg")
+        OpenAIProvider().analyze(b"x", "image/jpeg")
     assert exc.value.retryable
 
 
-def test_anthropic_missing_key_is_a_config_error_with_a_vague_user_message(settings):
-    settings.ANTHROPIC_API_KEY = ""
+@pytest.mark.parametrize(
+    "reply",
+    [completion(None, refusal="I can't help with that"), completion("", finish_reason="content_filter")],
+)
+def test_openai_refusals_are_not_retried(monkeypatch, openai_settings, reply):
+    patch_client(monkeypatch, reply=reply)
+    with pytest.raises(ProviderRejectedImage) as exc:
+        OpenAIProvider().analyze(b"x", "image/jpeg")
+    assert not exc.value.retryable
+
+
+def test_openai_missing_key_is_a_config_error_with_a_vague_user_message(openai_settings):
+    openai_settings.OPENAI_API_KEY = ""
     with pytest.raises(ProviderConfigError) as exc:
-        AnthropicVisionProvider().analyze(b"x", "image/jpeg")
+        OpenAIProvider().analyze(b"x", "image/jpeg")
     assert "key" not in exc.value.user_message.lower()
 
 
-def test_anthropic_timeout_becomes_unavailable(monkeypatch, settings):
-    settings.ANTHROPIC_API_KEY = "test-key-123456"
-    timeout = anthropic.APITimeoutError(request=httpx.Request("POST", "https://example.com"))
+def test_openai_timeout_becomes_unavailable(monkeypatch, openai_settings):
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://example.test"))
     patch_client(monkeypatch, error=timeout)
-    with pytest.raises(ProviderUnavailable):
-        AnthropicVisionProvider().analyze(b"x", "image/jpeg")
+    with pytest.raises(ProviderUnavailable) as exc:
+        OpenAIProvider().analyze(b"x", "image/jpeg")
+    assert exc.value.retryable
+
+
+def test_openai_out_of_credits_is_not_retried(monkeypatch, openai_settings):
+    error = status_error(openai.RateLimitError, 429, {"code": "insufficient_quota", "message": "quota"})
+    patch_client(monkeypatch, error=error)
+    with pytest.raises(ProviderConfigError) as exc:
+        OpenAIProvider().analyze(b"x", "image/jpeg")
+    assert not exc.value.retryable
+    assert "quota" not in exc.value.user_message.lower()
+
+
+def test_openai_normal_rate_limit_is_retried(monkeypatch, openai_settings):
+    error = status_error(openai.RateLimitError, 429, {"code": "rate_limit_exceeded", "message": "slow down"})
+    patch_client(monkeypatch, error=error)
+    with pytest.raises(ProviderRateLimited) as exc:
+        OpenAIProvider().analyze(b"x", "image/jpeg")
+    assert exc.value.retryable
+
+
+def test_openai_bad_key_is_a_config_error(monkeypatch, openai_settings):
+    error = status_error(openai.AuthenticationError, 401, {"code": "invalid_api_key", "message": "bad key"})
+    patch_client(monkeypatch, error=error)
+    with pytest.raises(ProviderConfigError):
+        OpenAIProvider().analyze(b"x", "image/jpeg")
 
 
 # ----------------------------------------------------------------- plant.id

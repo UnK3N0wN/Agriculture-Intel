@@ -5,7 +5,8 @@ from django.conf import settings
 
 REDACTED = "[REDACTED]"
 
-SK_ANT = re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}")
+OPENAI_STYLE_KEY = re.compile(r"sk-[A-Za-z0-9_\-]{8,}")
+GOOGLE_STYLE_KEY = re.compile(r"AIza[A-Za-z0-9_\-]{20,}")
 JWT = re.compile(r"eyJ[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]*")
 BEARER = re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=\-]{8,}")
 KEY_VALUE = re.compile(
@@ -17,7 +18,7 @@ def _known_secrets():
     """Exact secret values from settings (looked up fresh each time)."""
     values = [
         getattr(settings, "SECRET_KEY", ""),
-        getattr(settings, "ANTHROPIC_API_KEY", ""),
+        getattr(settings, "OPENAI_API_KEY", ""),
         getattr(settings, "PLANTID_API_KEY", ""),
         getattr(settings, "WEATHER_API_KEY", ""),
     ]
@@ -31,7 +32,8 @@ def _known_secrets():
 def redact(text):
     for secret in _known_secrets():
         text = text.replace(secret, REDACTED)
-    text = SK_ANT.sub(REDACTED, text)
+    text = OPENAI_STYLE_KEY.sub(REDACTED, text)
+    text = GOOGLE_STYLE_KEY.sub(REDACTED, text)
     text = JWT.sub(REDACTED, text)
     text = BEARER.sub(r"\1" + REDACTED, text)
     text = KEY_VALUE.sub(r"\1" + REDACTED, text)
