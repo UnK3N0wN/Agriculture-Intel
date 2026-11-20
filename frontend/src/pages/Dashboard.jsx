@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api, fetchRecommendations, getApiError } from "../api.js";
 import AuthedImage from "../components/AuthedImage.jsx";
 import Icon from "../components/Icon.jsx";
+import DashboardHero from "../components/DashboardHero.jsx";
 import LocationPicker from "../components/LocationPicker.jsx";
 import { CountUp, ScoreRing } from "../components/Meters.jsx";
 import PageTransition from "../components/PageTransition.jsx";
@@ -13,13 +14,6 @@ import { cap, formatDate } from "../lib/utils.js";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
 const rise = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } };
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -60,33 +54,40 @@ export default function Dashboard() {
   return (
     <PageTransition>
       <motion.div variants={container} initial="hidden" animate="show">
-        <motion.header className="page-head" variants={rise}>
-          <p className="eyebrow">{greeting()}</p>
-          <h1>{user.username}, here&apos;s your farm at a glance</h1>
-        </motion.header>
+        <motion.div variants={rise}>
+          <DashboardHero username={user.username} location={location} data={data} />
+        </motion.div>
 
         <motion.div variants={rise}>
           <LocationPicker />
         </motion.div>
 
-        <motion.div className="stats-grid" variants={rise}>
-          <div className="card stat-tile">
-            <span className="stat-label">Crops that fit now</span>
-            <strong className="stat-value">{data ? <CountUp value={data.count} /> : "–"}</strong>
-          </div>
-          <div className="card stat-tile">
-            <span className="stat-label">Best match</span>
-            <strong className="stat-value stat-text">{top[0]?.name || "–"}</strong>
-          </div>
-          <div className="card stat-tile">
-            <span className="stat-label">Season</span>
-            <strong className="stat-value stat-text">{data ? data.season.name : "–"}</strong>
-          </div>
-          <div className="card stat-tile">
-            <span className="stat-label">Scans so far</span>
-            <strong className="stat-value">{history.loading ? "–" : <CountUp value={history.count} />}</strong>
-          </div>
-        </motion.div>
+        {data ? (
+          <motion.div className="stats-grid" variants={rise}>
+            <div className="card stat-tile">
+              <span className="stat-label">Crops that fit now</span>
+              <strong className="stat-value"><CountUp value={data.count} /></strong>
+            </div>
+            <div className="card stat-tile">
+              <span className="stat-label">Best match</span>
+              <strong className="stat-value stat-text">{top[0]?.name || "–"}</strong>
+            </div>
+            <div className="card stat-tile">
+              <span className="stat-label">Season</span>
+              <strong className="stat-value stat-text">{data.season.name}</strong>
+            </div>
+            <div className="card stat-tile">
+              <span className="stat-label">Scans so far</span>
+              <strong className="stat-value">{history.loading ? "–" : <CountUp value={history.count} />}</strong>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.ol className="card onboarding" variants={rise}>
+            <li><strong>1</strong><span>Set your location above</span></li>
+            <li><strong>2</strong><span>See every crop ranked for your climate</span></li>
+            <li><strong>3</strong><span>Scan a sick leaf for a diagnosis</span></li>
+          </motion.ol>
+        )}
 
         <div className="grid-2">
           <motion.section className="card" variants={rise} aria-labelledby="top-crops">

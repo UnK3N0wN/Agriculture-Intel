@@ -4,11 +4,12 @@ import { useToast } from "../context/ToastContext.jsx";
 import { MONTHS, cap } from "../lib/utils.js";
 import Drawer from "./Drawer.jsx";
 import Icon from "./Icon.jsx";
+import SowingCalendar from "./SowingCalendar.jsx";
 import { MeterBar, ScoreRing } from "./Meters.jsx";
 
 const shortMonth = (n) => MONTHS[n - 1].slice(0, 3);
 
-function CropDetail({ item }) {
+function CropDetail({ item, climate }) {
   const toast = useToast();
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState("");
@@ -46,6 +47,9 @@ function CropDetail({ item }) {
           {cap(item.category)} · {cap(item.water_need)} water need
         </p>
         <h2>{item.name}</h2>
+        <p className={`provenance ${item.data?.verified ? "ok" : ""}`}>
+          {item.data?.verified ? "Verified reference data" : `Reference data (${item.data?.source || "demo"}), not yet verified`}
+        </p>
         {detail?.scientific_name && <p className="muted"><em>{detail.scientific_name}</em></p>}
       </header>
 
@@ -89,6 +93,10 @@ function CropDetail({ item }) {
             <div><dt>Growing time</dt><dd>{detail.growing_days_min}–{detail.growing_days_max} days</dd></div>
             {detail.soil_types.length > 0 && <div><dt>Soils</dt><dd>{detail.soil_types.join(", ")}</dd></div>}
           </dl>
+          
+          {detail.seasonal_rules.length > 0 && climate && (
+            <SowingCalendar rules={detail.seasonal_rules} climate={climate} currentMonth={new Date().getMonth() + 1} />
+          )}
 
           {detail.seasonal_rules.length > 0 && (
             <section aria-label="Sowing windows">
@@ -123,7 +131,7 @@ function CropDetail({ item }) {
   );
 }
 
-export default function CropDrawer({ item, onClose }) {
+export default function CropDrawer({ item, onClose, climate }) {
   // Keep showing the last crop while the drawer slides out.
   const [shown, setShown] = useState(item);
   useEffect(() => {
@@ -132,7 +140,7 @@ export default function CropDrawer({ item, onClose }) {
 
   return (
     <Drawer open={Boolean(item)} onClose={onClose} label={shown ? `${shown.name} details` : "Crop details"}>
-      {shown && <CropDetail key={shown.slug} item={shown} />}
+      {shown && <CropDetail key={shown.slug} item={shown} climate={climate} />}
     </Drawer>
   );
 }

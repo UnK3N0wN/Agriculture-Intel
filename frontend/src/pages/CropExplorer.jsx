@@ -4,6 +4,8 @@ import { fetchRecommendations, getApiError } from "../api.js";
 import CropDrawer from "../components/CropDrawer.jsx";
 import Icon from "../components/Icon.jsx";
 import LocationPicker from "../components/LocationPicker.jsx";
+import ClimateChart from "../components/ClimateChart.jsx";
+import CropIcon from "../components/CropIcon.jsx";
 import { ScoreRing } from "../components/Meters.jsx";
 import PageTransition from "../components/PageTransition.jsx";
 import { useFarmLocation } from "../context/LocationContext.jsx";
@@ -108,6 +110,7 @@ export default function CropExplorer() {
               </div>
             </motion.div>
           )}
+          {data && <ClimateChart climate={data.climate} month={month} place={location.label} />}
 
           {state.error && <p className="form-error" role="alert">{state.error}</p>}
 
@@ -132,7 +135,7 @@ export default function CropExplorer() {
                 <motion.li key={crop.slug} variants={fadeUp}>
                   <motion.button
                     type="button"
-                    className="crop-card"
+                    className={`crop-card tone-${scoreTone(crop.score)}`}
                     onClick={() => setSelected(crop)}
                     whileHover={{ y: -5 }}
                     whileTap={{ scale: 0.98 }}
@@ -140,13 +143,14 @@ export default function CropExplorer() {
                     aria-label={`${crop.name}, suitability ${crop.score} out of 100. Open details`}
                   >
                     <div className="crop-card-top">
-                      <div>
+                      <CropIcon slug={crop.slug} category={crop.category} />
+                      <div className="crop-card-title">
                         <h3>{crop.name}</h3>
                         <p className="muted small">
                           {cap(crop.category)} · {cap(crop.water_need)} water
                         </p>
                       </div>
-                      <ScoreRing value={crop.score} size={64} stroke={11} />
+                      <ScoreRing value={crop.score} size={60} stroke={11} />
                     </div>
                     <p className="crop-card-note">
                       Sow {crop.sow_window} · {crop.season_label}
@@ -169,7 +173,7 @@ export default function CropExplorer() {
         </>
       )}
 
-      <CropDrawer item={selected} onClose={() => setSelected(null)} />
+      <CropDrawer item={selected} onClose={() => setSelected(null)} climate={data?.location} />
     </PageTransition>
   );
 }

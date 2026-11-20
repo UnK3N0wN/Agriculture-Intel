@@ -6,6 +6,7 @@ import DiagnosisReport from "../components/DiagnosisReport.jsx";
 import Icon from "../components/Icon.jsx";
 import PageTransition from "../components/PageTransition.jsx";
 import ScannerZone from "../components/ScannerZone.jsx";
+import ScanTips from "../components/ScanTips.jsx";
 import { useCountdown } from "../hooks/useCountdown.js";
 import { useScanJob } from "../hooks/useScanJob.js";
 import { formatDuration } from "../lib/utils.js";
@@ -68,20 +69,21 @@ export default function Scanner() {
           <motion.section key="input" className="scanner-input" variants={stage} initial="initial" animate="animate" exit="exit">
             <ScannerZone file={file} previewUrl={previewUrl} onFile={pick} onClear={() => pick(null)} onReject={setLocalError} />
 
-            <div className="card scanner-form">
-              <div className="field">
-                <label htmlFor="crop-hint">Crop name (optional)</label>
-                <input
-                  id="crop-hint"
-                  className={`input ${hintOk ? "" : "is-invalid"}`}
-                  value={hint}
-                  maxLength={100}
-                  onChange={(e) => setHint(e.target.value)}
-                  placeholder="Tomato, rice, chilli…"
-                />
-                <p className="hint">Helps the analysis. Letters, numbers and basic punctuation only.</p>
-                {!hintOk && <p className="field-error">Remove special characters from the crop name.</p>}
-              </div>
+            <div className="card scanner-side">
+              <div className="card scanner-form">
+                <div className="field">
+                  <label htmlFor="crop-hint">Crop name (optional)</label>
+                  <input
+                    id="crop-hint"
+                    className={`input ${hintOk ? "" : "is-invalid"}`}
+                    value={hint}
+                    maxLength={100}
+                    onChange={(e) => setHint(e.target.value)}
+                    placeholder="Tomato, rice, chilli…"
+                  />
+                  <p className="hint">Helps the analysis. Letters, numbers and basic punctuation only.</p>
+                  {!hintOk && <p className="field-error">Remove special characters from the crop name.</p>}
+                </div>
 
               {errorMessage && (
                 <motion.p className="form-error" role="alert" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
@@ -95,6 +97,7 @@ export default function Scanner() {
               </motion.button>
               <p className="fine-print">Photos are re-encoded and stripped of location data before they&apos;re stored privately.</p>
             </div>
+            <ScanTips /></div>
           </motion.section>
         )}
 

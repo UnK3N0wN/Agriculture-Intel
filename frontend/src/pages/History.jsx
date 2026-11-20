@@ -6,7 +6,7 @@ import AuthedImage from "../components/AuthedImage.jsx";
 import DiagnosisReport from "../components/DiagnosisReport.jsx";
 import Drawer from "../components/Drawer.jsx";
 import Icon from "../components/Icon.jsx";
-import { ScoreRing } from "../components/Meters.jsx";
+import { CountUp, ScoreRing } from "../components/Meters.jsx";
 import PageTransition from "../components/PageTransition.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { cap, formatDate } from "../lib/utils.js";
@@ -67,6 +67,15 @@ export default function History() {
   );
   const selected = state.items.find((item) => item.id === selectedId) || null;
 
+  const counts = useMemo(
+    () => ({
+      healthy: state.items.filter((i) => i.health_status === "healthy").length,
+      attention: state.items.filter((i) => i.health_status === "unhealthy").length,
+      unclear: state.items.filter((i) => i.health_status === "unknown").length,
+    }),
+    [state.items]
+  );
+
   function closeDrawer() {
     setSelectedId(null);
     setConfirming(false);
@@ -94,6 +103,14 @@ export default function History() {
         <h1>Your past scans</h1>
         <p className="lede">{state.loading ? "Loading…" : `${state.count} scan${state.count === 1 ? "" : "s"} saved. Only you can see them.`}</p>
       </header>
+
+      {!state.loading && state.items.length > 0 && (
+        <div className="health-strip">
+          <div className="card stat-tile"><span className="stat-label">Healthy</span><strong className="stat-value"><CountUp value={counts.healthy} /></strong></div>
+          <div className="card stat-tile"><span className="stat-label">Needs attention</span><strong className="stat-value"><CountUp value={counts.attention} /></strong></div>
+          <div className="card stat-tile"><span className="stat-label">Unclear</span><strong className="stat-value"><CountUp value={counts.unclear} /></strong></div>
+        </div>
+      )}
 
       <div className="chip-row" role="group" aria-label="Filter scans">
         {FILTERS.map((f) => (
