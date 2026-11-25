@@ -1,6 +1,10 @@
+import math
+from statistics import mean
+
 W_SEASON, W_TEMP, W_RAIN = 0.50, 0.35, 0.15
 SEASON_CAP = 0.35       # out of season: never better than "poor"
 TEMP_CAP = 0.40         # temperature outside the tolerable range
+GOOD_FIT = 0.75
 MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
@@ -59,24 +63,95 @@ def _label(score):
         return "fair"
     return "poor"
 
+def cycle_months(crop):
+    return max(1, min(12, math.ceil(crop.growing_days_min / 30)))
 
-def score_crop(crop, hemisphere, climate_zone, month, weather):
+def cycle_fit(crop, normals, start_month):
+    n = cycle_months(crop)
+    idx = [(start_month - 1 + i) % 12 for i in range(n)]
+    temps = [normals["temp_c"][i] for i in idx]
+    rains = [normals["rain_mm"][i] for i in idx]
+    t_vals = [_temp_component(crop, t) for t in temps]
+    r_vals = [_rain_component(crop, r) for r in rains]
+    # The worst month matters: 70% average, 30% weakest month.
+    temp = 0.7 * mean(t_vals) + 0.3 * min(t_vals)
+    rain = 0.7 * mean(r_vals) + 0.3 * min(r_vals)
+    return {
+        "months": n,
+        "avg_temp_c": round(mean(temps), 1),
+        "avg_rain_mm": round(mean(rains)),
+        "temp": temp,
+        "rain": rain,
+        "fit": 0.6 * temp + 0.4 * rain,
+    }
+
+def _month_range_text(months):
+    months = set(months)
+    if not months:
+        return ""
+    if len(months) == 12:
+        return "year-round"
+    runs = []
+    for m in sorted(months):
+        if ((m - 2) % 12 + 1) in months:
+            continue  # not the start of a run
+        end = m
+        while (end % 12 + 1) in months:
+            end = end % 12 + 1
+        runs.append((m, end))
+    return ", ".join(
+        MONTH_ABBR[a] if a == b else f"{MONTH_ABBR[a]} to {MONTH_ABBR[b]}" for a, b in runs
+    )
+
+def climate_window(crop, normals):
+    good = [m for m in range(1, 13) if cycle_fit(crop, normals, m)["fit"] >= GOOD_FIT]
+    return _month_range_text(good)
+
+
+def _temp_verdict(value):
+    if value >= 0.99:
+        return "ideal"
+    return "tolerable but not ideal" if value > 0 else "outside what this crop tolerates"
+
+def score_crop(crop, hemisphere, climate_zone, month, weather, normals=None):
     """Returns a result dict, or None if the crop has no sowing rule for this climate."""
     season = _season_component(list(crop.seasonal_rules.all()), hemisphere, climate_zone, month)
-    if season is None:
-        return None
-    season_value, rule, distance = season
+    cycle = cycle_fit(crop, normals, month) if normals else None
 
     reasons = []
-    window = f"{MONTH_ABBR[rule.sow_start_month]} to {MONTH_ABBR[rule.sow_end_month]}"
-    if distance == 0:
-        reasons.append(f"This is within the {rule.season_label} sowing window ({window}).")
-    elif distance <= 2:
-        reasons.append(f"Sowing window ({window}) is {distance} month(s) away.")
+    if season is not None:
+        season_value, rule, distance = season
+        window = f"{MONTH_ABBR[rule.sow_start_month]} to {MONTH_ABBR[rule.sow_end_month]}"
+        season_label, season_source = rule.season_label, "calendar"
+        if distance == 0:
+            reasons.append(f"This is within the {rule.season_label} sowing window ({window}).")
+        elif distance <= 2:
+            reasons.append(f"Sowing window ({window}) is {distance} month(s) away.")
+        else:
+            reasons.append(f"Out of season: the usual sowing window is {window}.")
+    elif cycle is not None:
+        season_value = cycle["fit"]
+        window = climate_window(crop, normals) or "none strongly suited"
+        season_label, season_source = "Climate estimate", "climate"
+        reasons.append("No local sowing calendar for this crop yet, so the season is estimated from long-term climate averages.")
+        reasons.append(f"Best sowing months by climate: {window}.")
     else:
-        reasons.append(f"Out of season: the usual sowing window is {window}.")
+        return None
 
-    if weather:
+    if cycle is not None:
+        temp_value, rain_value = cycle["temp"], cycle["rain"]
+        reasons.append(
+            f"Over its roughly {cycle['months']}-month growing period the average temperature is "
+            f"{cycle['avg_temp_c']} C, which is {_temp_verdict(temp_value)}."
+        )
+        if rain_value >= 0.99:
+            reasons.append(f"Expected rain of about {cycle['avg_rain_mm']} mm a month suits this crop.")
+        else:
+            reasons.append(
+                f"Expected rain of about {cycle['avg_rain_mm']} mm a month is outside its preferred range; "
+                "plan irrigation or drainage."
+            )
+    elif weather:
         temp_value = _temp_component(crop, weather["avg_temp_c"])
         rain_value = _rain_component(crop, weather["avg_monthly_rain_mm"])
         temp_text = f"Average temperature of {weather['avg_temp_c']} C"
@@ -100,7 +175,7 @@ def score_crop(crop, hemisphere, climate_zone, month, weather):
         + W_TEMP * (0.5 if temp_value is None else temp_value)
         + W_RAIN * (0.5 if rain_value is None else rain_value)
     )
-    if season_value == 0:
+    if season_source == "calendar" and season_value == 0:
         total = min(total, SEASON_CAP)
     if temp_value is not None and temp_value == 0:
         total = min(total, TEMP_CAP)
@@ -118,8 +193,11 @@ def score_crop(crop, hemisphere, climate_zone, month, weather):
         "growing_days": [crop.growing_days_min, crop.growing_days_max],
         "score": score,
         "label": _label(score),
-        "season_label": rule.season_label,
+        "season_label": season_label,
+        "season_source": season_source,
         "sow_window": window,
+        "climate_basis": cycle is not None,
+        "data": {"source": getattr(crop, "source", "demo"), "verified": getattr(crop, "verified", False)},
         "components": {
             "season": pct(season_value),
             "temperature": pct(temp_value),
@@ -129,11 +207,11 @@ def score_crop(crop, hemisphere, climate_zone, month, weather):
     }
 
 
-def rank_crops(crops, hemisphere, climate_zone, month, weather):
+def rank_crops(crops, hemisphere, climate_zone, month, weather, normals=None):
     """Returns (ranked results, number of crops not applicable to this climate zone)."""
     results, excluded = [], 0
     for crop in crops:
-        item = score_crop(crop, hemisphere, climate_zone, month, weather)
+        item = score_crop(crop, hemisphere, climate_zone, month, weather, normals)
         if item is None:
             excluded += 1
         else:

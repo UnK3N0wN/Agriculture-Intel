@@ -195,6 +195,9 @@ WEATHER_API_BASE_URL = env("WEATHER_API_BASE_URL", default="https://api.open-met
 WEATHER_API_KEY = env("WEATHER_API_KEY", default="")
 WEATHER_CACHE_SECONDS = env.int("WEATHER_CACHE_SECONDS", default=10800)
 
+CLIMATE_API_BASE_URL = env("CLIMATE_API_BASE_URL", default="https://archive-api.open-meteo.com/v1/archive")
+CLIMATE_NORMALS_YEARS = env.int("CLIMATE_NORMALS_YEARS", default=10)
+
 MOCK_DELAY_SECONDS = env.float("MOCK_DELAY_SECONDS", default=2.0)
 CELERY_BEAT_SCHEDULE = {
     "fail-stale-scan-jobs": {"task": "scans.fail_stale_jobs", "schedule": 300.0},

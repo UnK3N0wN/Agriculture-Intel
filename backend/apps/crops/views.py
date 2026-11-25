@@ -23,6 +23,7 @@ from .services.region import classify_location
 from .services.scoring import rank_crops
 from .services.season import get_season
 from .services.weather import get_weather_summary
+from .services.climate import climate_payload, get_climate_normals
 
 
 class LocationRequired(APIException):
@@ -136,14 +137,23 @@ class RecommendView(APIView):
 
         info = classify_location(latitude, longitude)
         season = get_season(info.hemisphere, info.climate_zone, month)
-        # Weather describes NOW, so it is only used when asking about the current month.
+        # Short-term weather describes NOW, so it is only fetched for the current month.
         weather = get_weather_summary(latitude, longitude) if month == current_month else None
+        # Long-term climate averages work for ANY month.
+        normals = get_climate_normals(latitude, longitude)
 
         crops = Crop.objects.filter(is_active=True).prefetch_related("seasonal_rules")
         if category:
             crops = crops.filter(category=category)
-        ranked, excluded = rank_crops(crops, info.hemisphere, info.climate_zone, month, weather)
+        ranked, excluded = rank_crops(crops, info.hemisphere, info.climate_zone, month, weather, normals)
         results = ranked[:limit]
+
+        if normals:
+            basis = f"{normals['years']}-year climate averages"
+        elif weather:
+            basis = "season, temperature and rainfall"
+        else:
+            basis = "season and climate zone only"
 
         return Response({
             "location": {
@@ -158,7 +168,9 @@ class RecommendView(APIView):
             "season": season,
             "weather": weather,
             "weather_used": weather is not None,
-            "scoring_basis": "season, temperature and rainfall" if weather else "season and climate zone only",
+            "climate": climate_payload(normals),
+            "climate_used": normals is not None,
+            "scoring_basis": basis,
             "count": len(results),
             "not_applicable_count": excluded,
             "results": results,

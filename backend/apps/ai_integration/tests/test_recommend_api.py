@@ -17,6 +17,7 @@ BENGALURU = {"lat": "12.97", "lon": "77.59"}
 @pytest.fixture(autouse=True)
 def fake_weather(monkeypatch):
     monkeypatch.setattr("apps.crops.views.get_weather_summary", lambda lat, lon: WEATHER)
+    monkeypatch.setattr("apps.crops.views.get_climate_normals", lambda lat, lon: None)
 
 
 @pytest.fixture(autouse=True)
@@ -68,6 +69,7 @@ def test_current_month_uses_weather(api):
 
 def test_weather_outage_still_returns_results(api, monkeypatch):
     monkeypatch.setattr("apps.crops.views.get_weather_summary", lambda lat, lon: None)
+    monkeypatch.setattr("apps.crops.views.get_climate_normals", lambda lat, lon: None)
     r = api.get("/api/crops/recommend/", BENGALURU)
     assert r.status_code == 200 and r.data["weather_used"] is False
     assert r.data["scoring_basis"] == "season and climate zone only"

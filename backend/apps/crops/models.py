@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
+from django.utils import timezone
 
 MONTH_VALIDATORS = [MinValueValidator(1), MaxValueValidator(12)]
 
@@ -84,6 +85,13 @@ class Crop(models.Model):
     rain_max_mm = models.FloatField()
     soil_types = models.JSONField(default=list, blank=True)
     is_active = models.BooleanField(default=True)
+
+    source = models.CharField(max_length=60, default="demo")
+    source_url = models.URLField(blank=True)
+    verified = models.BooleanField(default=False)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -127,6 +135,9 @@ class SeasonalRule(models.Model):
     )
     notes = models.TextField(blank=True)
 
+    source = models.CharField(max_length=60, default="demo")
+    verified = models.BooleanField(default=False)
+
     class Meta:
         indexes = [
             models.Index(fields=["hemisphere", "climate_zone"], name="rule_hemi_zone_idx"),
@@ -168,3 +179,20 @@ class Bookmark(models.Model):
 
     def __str__(self):
         return f"{self.user_id} -> {self.crop_id}"
+
+class ClimateNormal(models.Model):
+    cell_lat = models.FloatField()
+    cell_lon = models.FloatField()
+    temp_c = models.JSONField()
+    rain_mm = models.JSONField()
+    years = models.PositiveSmallIntegerField()
+    source = models.CharField(max_length=80)
+    fetched_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["cell_lat", "cell_lon"], name="unique_climate_cell")
+        ]
+
+    def __str__(self):
+        return f"Climate {self.cell_lat}, {self.cell_lon}"

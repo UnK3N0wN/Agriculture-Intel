@@ -18,7 +18,7 @@ class CropSerializer(serializers.ModelSerializer):
     class Meta:
         model = Crop
         fields = (
-            "id", "name", "slug", "scientific_name", "category", "description", "water_need",
+            "id", "name", "slug", "scientific_name", "category", "description", "water_need", "source", "verified",
             "growing_days_min", "growing_days_max", "temp_min_c", "temp_opt_min_c",
             "temp_opt_max_c", "temp_max_c", "rain_min_mm", "rain_max_mm", "soil_types", "bookmarked",
         )
