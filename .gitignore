@@ -1,8 +1,41 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Secrets and local settings: never commit the real ones
 .env
-node_modules/
+.env.*
+!.env.example
+
+# Django
 backend/staticfiles/
+backend/private_media/*
+!backend/private_media/.gitkeep
+*.sqlite3
+*.log
+
+# Datasets you download yourself (they're big and public; re-download from the README)
+backend/data/external/
+
+# Node / Vite
+node_modules/
 frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# Deployment secrets (Part 6)
+deploy/.env
+deploy/certs/
+deploy/backups/
+
+# Editors / OS
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db
